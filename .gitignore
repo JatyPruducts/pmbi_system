@@ -7,3 +7,5 @@ frontend/dist/
 backend/data/models/*.pkl
 *.egg-info/
 /docs/PRACTICE_REPORT.md
+/infra/.env.server.example
+/infra/docker-compose.server.yml
