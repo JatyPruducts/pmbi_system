@@ -223,12 +223,16 @@ def upgrade() -> None:
 
     existing_org_rows = bind.execute(sa.select(org_units.c.id, org_units.c.code)).all()
     org_by_code = {row.code: row.id for row in existing_org_rows if row.code}
-    if "SALES" not in org_by_code:
-        sales_id = UUID("2d17938b-c6be-41f4-8afe-2f9a42e2454e")
-        bind.execute(
-            org_units.insert().values(id=sales_id, name="Sales", code="SALES", created_at=now)
-        )
-        org_by_code["SALES"] = sales_id
+
+    required_orgs: dict[str, tuple[UUID, str]] = {
+        "MKT": (UUID("f1b9c1e8-e53f-46d6-beb7-b87f8f4718d1"), "Marketing"),
+        "SALES": (UUID("2d17938b-c6be-41f4-8afe-2f9a42e2454e"), "Sales"),
+    }
+    for code, (org_id, name) in required_orgs.items():
+        if code in org_by_code:
+            continue
+        bind.execute(org_units.insert().values(id=org_id, name=name, code=code, created_at=now))
+        org_by_code[code] = org_id
 
     existing_user_emails = {row[0] for row in bind.execute(sa.select(users.c.email)).all()}
     for row in USERS:
@@ -274,8 +278,6 @@ def upgrade() -> None:
 
     existing_emp_ext = {row[0] for row in bind.execute(sa.select(employees.c.external_id)).all()}
     employee_id_by_external: dict[str, UUID] = {}
-    for spec in EMPLOYEES:
-        employee_id_by_external[spec["external_id"]] = spec["id"]
 
     for spec in EMPLOYEES:
         if spec["external_id"] in existing_emp_ext:
@@ -302,6 +304,11 @@ def upgrade() -> None:
                 hire_date=spec["hire_date"],
             )
         )
+        employee_id_by_external[spec["external_id"]] = spec["id"]
+
+    # Build authoritative map only from actually existing employees.
+    emp_rows = bind.execute(sa.select(employees.c.id, employees.c.external_id)).all()
+    employee_id_by_external = {row.external_id: row.id for row in emp_rows if row.external_id}
 
     existing_kpi = {row.code: row.id for row in bind.execute(sa.select(kpi_types.c.id, kpi_types.c.code)).all()}
     for code, name, unit in KPI_CODES:
