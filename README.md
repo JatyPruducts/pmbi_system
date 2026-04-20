@@ -111,7 +111,7 @@ celery -A app.tasks.celery_app worker -l info
 
 4. **Доступ:**
 
-   - Сайт и API через шлюз: `http://localhost` (Nginx проксирует `/api/` на backend; см. `infra/nginx/default.conf`).  
+   - Сайт и API через шлюз: `http://localhost:8088` (или порт из `NGINX_HTTP_PORT`; Nginx проксирует `/api/` на backend, см. `infra/nginx/default.conf`).  
    - Прямой API (если проброшен порт): `http://localhost:8000`.  
    - RabbitMQ Management: `http://localhost:15672` (логин/пароль из `RABBITMQ_DEFAULT_*` в `.env`).
 
@@ -144,7 +144,7 @@ celery -A app.tasks.celery_app worker -l info
 
 ### Частые проблемы
 
-- **Порт 80 занят** — в `infra/.env` задайте, например, `NGINX_HTTP_PORT=8080`.  
+- **Порт 80 занят / открыт другой локальный Nginx** — по умолчанию используйте `NGINX_HTTP_PORT=8088` и открывайте `http://localhost:8088`.  
 - **Backend не видит БД** — проверьте, что `DATABASE_URL` указывает на `127.0.0.1` при локальном API и на `postgres` при запуске API **внутри** Docker.  
 - **Celery не обрабатывает задачи** — должен быть доступен RabbitMQ (`CELERY_BROKER_URL`) и запущен процесс `celery worker`.  
 - **Ошибка миграций** — сначала должен быть запущен PostgreSQL, затем `alembic upgrade head`.
@@ -156,4 +156,4 @@ celery -A app.tasks.celery_app worker -l info
 | Режим | Фронт | API / OpenAPI |
 |--------|--------|----------------|
 | Локальная разработка | `http://localhost:5173` | `http://localhost:8000`, `/docs` |
-| Docker + Nginx | `http://localhost` (или порт из `NGINX_HTTP_PORT`) | через `/api/` или порт `API_PORT` |
+| Docker + Nginx | `http://localhost:8088` (или порт из `NGINX_HTTP_PORT`) | через `/api/` или порт `API_PORT` |

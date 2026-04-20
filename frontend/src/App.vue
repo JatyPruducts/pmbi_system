@@ -1,6 +1,6 @@
 <template>
   <div class="app">
-    <header class="top">
+    <header v-if="!isLoginPage" class="top">
       <h1>PMBI</h1>
       <nav v-if="auth.token">
         <RouterLink :to="homeRoute">Главная</RouterLink>
@@ -12,7 +12,7 @@
         <button type="button" @click="logout">Выход</button>
       </nav>
     </header>
-    <main class="main">
+    <main class="main" :class="{ 'main-login': isLoginPage }">
       <RouterView />
     </main>
   </div>
@@ -20,16 +20,18 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { useAuthStore } from "./stores/auth";
 
 const auth = useAuthStore();
 const router = useRouter();
+const route = useRoute();
 const homeRoute = computed(() => {
   if (auth.role === "TEAMLEAD") return "/lead";
   if (auth.role === "EMPLOYEE") return "/me";
   return "/";
 });
+const isLoginPage = computed(() => route.path === "/login");
 
 function logout() {
   auth.clear();
@@ -48,6 +50,26 @@ body {
 }
 .app {
   min-height: 100vh;
+  position: relative;
+}
+.app::before,
+.app::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+}
+.app::before {
+  background:
+    radial-gradient(56rem 28rem at -5% -10%, rgba(30, 58, 138, 0.18), transparent 72%),
+    radial-gradient(44rem 22rem at 110% 100%, rgba(37, 99, 235, 0.16), transparent 70%),
+    linear-gradient(180deg, #f8fbff 0%, #eef4fb 100%);
+}
+.app::after {
+  background:
+    linear-gradient(145deg, transparent 0%, transparent 39%, rgba(30, 64, 175, 0.08) 50%, transparent 61%, transparent 100%),
+    linear-gradient(25deg, transparent 0%, transparent 42%, rgba(15, 23, 42, 0.07) 50%, transparent 58%, transparent 100%);
 }
 .top {
   display: flex;
@@ -103,6 +125,13 @@ body {
   padding: 1.2rem;
   max-width: 1460px;
   margin: 0 auto;
+}
+.main.main-login {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  min-height: 100dvh;
+  overflow: hidden;
 }
 .card {
   background: #ffffff;
