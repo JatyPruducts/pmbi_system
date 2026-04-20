@@ -1,0 +1,124 @@
+# Скопируйте .env.example в .env в этом каталоге (infra/) и задайте значения.
+# Запуск: cd infra && docker compose --profile full up -d
+# Compose подставляет переменные из .env рядом с этим файлом.
+
+services:
+  nginx:
+    image: nginx:${NGINX_IMAGE:-1.25-alpine}
+    ports:
+      - "${NGINX_HTTP_PORT:-80}:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ../frontend/dist:/usr/share/nginx/html:ro
+    depends_on:
+      frontend_builder:
+        condition: service_healthy
+      api:
+        condition: service_started
+    profiles: ["full", "web"]
+
+  frontend_builder:
+    image: node:${NODE_IMAGE:-20-alpine}
+    working_dir: /app
+    command: sh -c "npm ci && npm run build && touch /tmp/frontend-built && tail -f /dev/null"
+    volumes:
+      - ../frontend:/app
+      - frontend_node_modules:/app/node_modules
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/frontend-built && test -f /app/dist/index.html"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    profiles: ["full", "web"]
+
+  api:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://pmbi:pmbi@postgres:5432/pmbi}
+      SYNC_DATABASE_URL: ${SYNC_DATABASE_URL:-postgresql://pmbi:pmbi@postgres:5432/pmbi}
+      MONGODB_URL: ${MONGODB_URL:-mongodb://mongo:27017}
+      MONGODB_DB: ${MONGODB_DB:-pmbi}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-amqp://guest:guest@rabbitmq:5672//}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-use-long-random-string}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongo:
+        condition: service_started
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    profiles: ["full", "api"]
+
+  celery_worker:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://pmbi:pmbi@postgres:5432/pmbi}
+      SYNC_DATABASE_URL: ${SYNC_DATABASE_URL:-postgresql://pmbi:pmbi@postgres:5432/pmbi}
+      MONGODB_URL: ${MONGODB_URL:-mongodb://mongo:27017}
+      MONGODB_DB: ${MONGODB_DB:-pmbi}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-amqp://guest:guest@rabbitmq:5672//}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-use-long-random-string}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
+    command: celery -A app.tasks.celery_app worker -l ${CELERY_LOG_LEVEL:-info}
+    depends_on:
+      - postgres
+      - mongo
+      - redis
+      - rabbitmq
+    profiles: ["full", "workers"]
+
+  postgres:
+    image: postgres:${POSTGRES_IMAGE:-16-alpine}
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-pmbi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pmbi}
+      POSTGRES_DB: ${POSTGRES_DB:-pmbi}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mongo:
+    image: mongo:${MONGO_IMAGE:-7}
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    volumes:
+      - mongodata:/data/db
+
+  redis:
+    image: redis:${REDIS_IMAGE:-7-alpine}
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+
+  rabbitmq:
+    image: rabbitmq:${RABBITMQ_IMAGE:-3-management-alpine}
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-guest}
+    ports:
+      - "${RABBITMQ_AMQP_PORT:-5672}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+
+volumes:
+  pgdata: {}
+  mongodata: {}
+  frontend_node_modules: {}
